@@ -17,11 +17,11 @@ make run
 ### Make RPC calls using curl
 
 ```
-curl -d '{"method":"Arith.Divide","params":[{"A": 10, "B":2}], "id": 0}' http://localhost:8080
+curl -H "Content-Type: application/json"  -d '{"jsonrpc": "2.0", "method":"Arith.Divide","params":[{"A": 10, "B":2}], "id": 1}' http://localhost:8080/jsonrpc/v1/Arith.Divide -v
 or
 make req
 ```
 
 ```
-{"id":0,"result":{"Quo":5,"Rem":0},"error":null}
+{"jsonrpc":"2.0","result":{"Quo":5,"Rem":0},"id":1}
 ```
