@@ -1,0 +1,8 @@
+hash: 877f1817cca3e3fff431a2214941d9a64a228fcf5073c72e7581b3e748191a2e
+updated: 2017-02-07T14:42:35.170825505+03:00
+imports:
+- name: github.com/gorilla/rpc
+  version: 22c016f3df3febe0c1f6727598b6389507e03a18
+  subpackages:
+  - json
+testImports: []

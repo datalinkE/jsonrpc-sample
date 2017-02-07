@@ -1,0 +1,5 @@
+package: github.com/datalinkE/jsonrpc-sample
+import:
+- package: github.com/gorilla/rpc
+  subpackages:
+  - json
