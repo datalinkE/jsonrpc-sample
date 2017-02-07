@@ -2,8 +2,10 @@ package main
 
 import (
 	"errors"
-	"github.com/datalinkE/jsonrpc-sample/methodcodec"
+	"github.com/datalinkE/jsonrpc-sample/method/methodcodec"
+	"github.com/datalinkE/jsonrpc-sample/method/methodserver"
 	"github.com/gorilla/rpc/v2"
+	jsonrpc "github.com/gorilla/rpc/v2/json2"
 	"gopkg.in/gin-gonic/gin.v1"
 	"log"
 	"net/http"
@@ -42,8 +44,13 @@ func main() {
 	rpcServer.RegisterCodec(methodcodec.NewMethodCodec(), "application/json")
 	rpcServer.RegisterService(arith, "")
 
+	methodserver := methodserver.NewServer()
+	methodserver.RegisterCodec(jsonrpc.NewCodec(), "application/json")
+	methodserver.RegisterService(arith, "")
+
 	router := gin.Default()
 	router.POST("/jsonrpc/v1/:method", gin.WrapH(rpcServer))
+	router.POST("/jsonrpc/v2/:method", gin.WrapH(methodserver))
 
 	log.Fatal(router.Run())
 }
