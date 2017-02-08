@@ -99,7 +99,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Get service method to be called.
 	methodName, errMethod := codecReq.Method()
 	if errMethod != nil {
-		codecReq.WriteError(w, 400, errMethod)
+		WriteError(w, 400, errMethod.Error())
+		return
+	}
+
+	if methodName == "" {
+		WriteError(w, 400, "rpc: method field should not be empty")
 		return
 	}
 
