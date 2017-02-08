@@ -50,7 +50,7 @@ func main() {
 	anotherServer.RegisterCodec(jsonrpc.NewCodec(), "application/json")
 
 	router := gin.Default()
-	router.POST("/jsonrpc/v1/:method", gin.WrapH(rpcServer))
+	router.POST("/jsonrpc/v1", gin.WrapH(rpcServer))
 	router.POST("/jsonrpc/v2/:method", gin.WrapH(anotherServer))
 
 	log.Fatal(router.Run())

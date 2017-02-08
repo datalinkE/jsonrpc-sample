@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
-	"strings"
 	"unicode"
 	"unicode/utf8"
 )
@@ -97,20 +96,9 @@ func NewRpcService(rcvr interface{}) (*RpcService, error) {
 	return s, nil
 }
 
-// get returns a registered service given a method name.
-//
-// The method name uses a dotted notation as in "Service.Method".
+// get returns a registered object given a method name.
 func (service *RpcService) Get(method string) (*RpcServiceMethod, error) {
-	parts := strings.Split(method, ".")
-	if len(parts) != 2 {
-		err := fmt.Errorf("rpc: service/method request ill-formed: %q", method)
-		return nil, err
-	}
-	if service == nil {
-		err := fmt.Errorf("rpc: can't find service %q", method)
-		return nil, err
-	}
-	serviceMethod := service.methods[parts[1]]
+	serviceMethod := service.methods[method]
 	if serviceMethod == nil {
 		err := fmt.Errorf("rpc: can't find method %q", method)
 		return nil, err

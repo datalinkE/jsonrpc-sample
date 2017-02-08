@@ -110,7 +110,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	methodSpec, errGet := s.service.Get(methodName)
 	if errGet != nil {
-		codecReq.WriteError(w, 400, errGet)
+		WriteError(w, 404, errGet.Error())
 		return
 	}
 	// Decode the args.
