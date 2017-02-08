@@ -1,5 +1,7 @@
-package: github.com/datalinkE/jsonrpc-sample
+package: github.com/datalinkE/rpcserver
 import:
 - package: github.com/gorilla/rpc
   subpackages:
-  - json
+  - v2
+  - v2/json2
+- package: gopkg.in/gin-gonic/gin.v1
