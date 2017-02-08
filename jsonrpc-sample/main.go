@@ -43,7 +43,7 @@ func main() {
 	rpcServer.RegisterCodec(jsonrpc.NewCodec(), "application/json")
 	rpcServer.RegisterService(arith, "")
 
-	anotherServer, err := rpcserver.NewServer(arith, "")
+	anotherServer, err := rpcserver.NewServer(arith)
 	if err != nil {
 		log.Fatal(err)
 	}

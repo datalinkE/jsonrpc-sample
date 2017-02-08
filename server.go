@@ -1,5 +1,6 @@
 // Copyright 2009 The Go Authors. All rights reserved.
 // Copyright 2012 The Gorilla Authors. All rights reserved.
+// Copyright 2017 Andrey Pichugin. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -32,8 +33,8 @@ import (
 //    - The method has return type error.
 //
 
-func NewServer(receiver interface{}, name string) (*Server, error) {
-	service, err := NewRpcService(receiver, name)
+func NewServer(receiver interface{}) (*Server, error) {
+	service, err := NewRpcService(receiver)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +43,7 @@ func NewServer(receiver interface{}, name string) (*Server, error) {
 		codecs:  make(map[string]rpc.Codec),
 		service: service,
 	}
-	// TODO: maybe register default codec there
+	// TODO: maybe register default json-rpc codec
 	return server, nil
 }
 

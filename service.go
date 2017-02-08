@@ -1,5 +1,6 @@
 // Copyright 2009 The Go Authors. All rights reserved.
 // Copyright 2012 The Gorilla Authors. All rights reserved.
+// Copyright 2017 Andrey Pichugin. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -38,23 +39,16 @@ type RpcServiceMethod struct {
 }
 
 // NewRpcService creates a RpcService object with assotiated RpcServiceMethods.
-func NewRpcService(rcvr interface{}, name string) (*RpcService, error) {
+func NewRpcService(rcvr interface{}) (*RpcService, error) {
 	// Setup service.
 	s := &RpcService{
-		name:     name,
 		rcvr:     reflect.ValueOf(rcvr),
 		rcvrType: reflect.TypeOf(rcvr),
 		methods:  make(map[string]*RpcServiceMethod),
 	}
-	if name == "" {
-		s.name = reflect.Indirect(s.rcvr).Type().Name()
-		if !IsExported(s.name) {
-			return nil, fmt.Errorf("rpc: type %q is not exported", s.name)
-		}
-	}
-	if s.name == "" {
-		return nil, fmt.Errorf("rpc: no service name for type %q",
-			s.rcvrType.String())
+	s.name = reflect.Indirect(s.rcvr).Type().Name()
+	if !IsExported(s.name) {
+		return nil, fmt.Errorf("rpc: type %q is not exported", s.name)
 	}
 	// Setup methods.
 	for i := 0; i < s.rcvrType.NumMethod(); i++ {
