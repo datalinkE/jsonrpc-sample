@@ -5,10 +5,15 @@ import (
 )
 
 func PathHasMethod(path string, method string) bool {
-	pathWords := strings.Split(path, "/")
-	if method == "" || len(pathWords) < 1 {
-		return false
-	}
+	pathLastPart := LastPart(path)
+	return pathLastPart == method
+}
 
-	return pathWords[len(pathWords)-1] == method
+func LastPart(path string) string {
+	pathWords := strings.Split(path, "/")
+	length := len(pathWords)
+	if length == 0 { // should not be
+		return path
+	}
+	return pathWords[length-1]
 }

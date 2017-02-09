@@ -40,8 +40,9 @@ func NewServer(receiver interface{}) (*Server, error) {
 	}
 
 	server := &Server{
-		codecs:  make(map[string]rpc.Codec),
-		service: service,
+		codecs:      make(map[string]rpc.Codec),
+		service:     service,
+		errorWriter: &JSONRPC2ErrorWriter{}, // TODO: think about moving this into codec/codecReq
 	}
 	// TODO: maybe register default json-rpc codec
 	return server, nil
@@ -49,8 +50,9 @@ func NewServer(receiver interface{}) (*Server, error) {
 
 // Server serves registered RPC service using registered codecs.
 type Server struct {
-	codecs  map[string]rpc.Codec
-	service *RpcService
+	codecs      map[string]rpc.Codec
+	service     *RpcService
+	errorWriter ProtocolErrorWriter
 }
 
 // RegisterCodec adds a new codec to the server.
@@ -94,28 +96,32 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, 415, "rpc: unrecognized Content-Type: "+contentType)
 		return
 	}
+
 	// Create a new codec request.
 	codecReq := codec.NewRequest(r)
+
+	pathMethod := LastPart(r.URL.Path)
+	_, errGet := s.service.Get(pathMethod)
+	if errGet != nil {
+		s.errorWriter.ProtocolError(w, codecReq, 404, errGet.Error())
+		return
+	}
+
 	// Get service method to be called.
 	methodName, errMethod := codecReq.Method()
 	if errMethod != nil {
-		WriteError(w, 400, errMethod.Error())
+		codecReq.WriteError(w, 400, errMethod)
 		return
 	}
 
-	if methodName == "" {
-		WriteError(w, 400, "rpc: method field should not be empty")
-		return
-	}
-
-	if !PathHasMethod(r.URL.Path, methodName) {
-		WriteError(w, 404, fmt.Sprintf("rpc: URL.Path '%v' does not end with '%v' methodName", r.URL.Path, methodName))
+	if pathMethod != methodName {
+		s.errorWriter.ProtocolError(w, codecReq, 404, fmt.Sprintf("rpc: URL.Path '%v' does not end with '%v' methodName", r.URL.Path, methodName))
 		return
 	}
 
 	methodSpec, errGet := s.service.Get(methodName)
 	if errGet != nil {
-		WriteError(w, 404, errGet.Error())
+		codecReq.WriteError(w, 400, errGet)
 		return
 	}
 	// Decode the args.
@@ -138,9 +144,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if errInter != nil {
 		errResult = errInter.(error)
 	}
-	// Prevents Internet Explorer from MIME-sniffing a response away
-	// from the declared content-type
-	w.Header().Set("x-content-type-options", "nosniff")
+
 	// Encode the response.
 	if errResult == nil {
 		codecReq.WriteResponse(w, reply.Interface())
@@ -154,3 +158,5 @@ func WriteError(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	fmt.Fprint(w, msg)
 }
+
+// Message: fmt.Sprintf("rpc: URL.Path '%v' does not end with '%v' methodName", r.URL.Path, methodName),
