@@ -8,7 +8,6 @@ package rpcserver
 
 import (
 	"fmt"
-	"github.com/gorilla/rpc/v2"
 	"net/http"
 	"reflect"
 	"strings"
@@ -19,8 +18,6 @@ import (
 // ----------------------------------------------------------------------------
 
 // NewServer returns a new RPC server.
-// The name parameter is optional: if empty it will be inferred from
-// the receiver type name.
 //
 // Methods from the receiver will be extracted if these rules are satisfied:
 //
@@ -40,9 +37,8 @@ func NewServer(receiver interface{}) (*Server, error) {
 	}
 
 	server := &Server{
-		codecs:      make(map[string]rpc.Codec),
-		service:     service,
-		errorWriter: &JSONRPC2ErrorWriter{}, // TODO: think about moving this into codec/codecReq
+		codecs:  make(map[string]Codec),
+		service: service,
 	}
 	// TODO: maybe register default json-rpc codec
 	return server, nil
@@ -50,9 +46,8 @@ func NewServer(receiver interface{}) (*Server, error) {
 
 // Server serves registered RPC service using registered codecs.
 type Server struct {
-	codecs      map[string]rpc.Codec
-	service     *RpcService
-	errorWriter ProtocolErrorWriter
+	codecs  map[string]Codec
+	service *RpcService
 }
 
 // RegisterCodec adds a new codec to the server.
@@ -60,7 +55,7 @@ type Server struct {
 // Codecs are defined to process a given serialization scheme, e.g., JSON or
 // XML. A codec is chosen based on the "Content-Type" header from the request,
 // excluding the charset definition.
-func (s *Server) RegisterCodec(codec rpc.Codec, contentType string) {
+func (s *Server) RegisterCodec(codec Codec, contentType string) {
 	s.codecs[strings.ToLower(contentType)] = codec
 }
 
@@ -85,7 +80,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if idx != -1 {
 		contentType = contentType[:idx]
 	}
-	var codec rpc.Codec
+	var codec Codec
 	if contentType == "" && len(s.codecs) == 1 {
 		// If Content-Type is not set and only one codec has been registered,
 		// then default to that codec.
@@ -97,13 +92,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create a new codec request.
-	codecReq := codec.NewRequest(r)
-
 	pathMethod := LastPart(r.URL.Path)
 	_, errGet := s.service.Get(pathMethod)
 	if errGet != nil {
-		s.errorWriter.ProtocolError(w, codecReq, 404, errGet.Error())
+		WriteError(w, 404, errGet.Error())
+		return
+	}
+
+	// Create a new codec request.
+	codecReq := codec.NewRequest(r)
+
+	if codecReq.Error() != nil {
+		codecReq.WriteError(w, 400, codecReq.Error())
 		return
 	}
 
@@ -115,7 +115,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if pathMethod != methodName {
-		s.errorWriter.ProtocolError(w, codecReq, 404, fmt.Sprintf("rpc: URL.Path '%v' does not end with '%v' methodName", r.URL.Path, methodName))
+		codecReq.WriteError(w, 400, fmt.Errorf("rpc: URL.Path '%v' does not end with '%v' methodName", r.URL.Path, methodName))
 		return
 	}
 
@@ -158,5 +158,3 @@ func WriteError(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	fmt.Fprint(w, msg)
 }
-
-// Message: fmt.Sprintf("rpc: URL.Path '%v' does not end with '%v' methodName", r.URL.Path, methodName),

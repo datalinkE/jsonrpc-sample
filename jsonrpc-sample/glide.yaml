@@ -1,0 +1,8 @@
+package: github.com/datalinkE/rpcserver/jsonrpc-sample
+import:
+- package: gopkg.in/gin-gonic/gin.v1
+testImport:
+- package: github.com/gin-gonic/gin
+- package: github.com/stretchr/testify
+  subpackages:
+  - require

@@ -1,9 +1,10 @@
-package rpcserver
+package main
 
 import (
 	"errors"
+	"github.com/datalinkE/rpcserver"
+	"github.com/datalinkE/rpcserver/jsonrpc2"
 	"github.com/gin-gonic/gin"
-	jsonrpc "github.com/gorilla/rpc/v2/json2"
 	"github.com/stretchr/testify/require"
 	"io/ioutil"
 	"net/http"
@@ -27,9 +28,9 @@ func ShowResponse(t *testing.T, w *httptest.ResponseRecorder) string {
 
 func performRequest(t *testing.T, getOrPost string, path string, body string) (*MockRpcObject, *httptest.ResponseRecorder) {
 	mock := NewMockRpcObject(t)
-	server, err := NewServer(mock)
+	server, err := rpcserver.NewServer(mock)
 	require.NoError(t, err)
-	server.RegisterCodec(jsonrpc.NewCodec(), "application/json")
+	server.RegisterCodec(jsonrpc2.NewCodec(), "application/json")
 	engine := gin.Default()
 	engine.POST("/jsonrpc/v1/:method", gin.WrapH(server))
 
