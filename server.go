@@ -114,11 +114,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if pathMethod != methodName {
-		codecReq.WriteError(w, 400, fmt.Errorf("rpc: URL.Path '%v' does not end with '%v' methodName", r.URL.Path, methodName))
-		return
-	}
-
 	methodSpec, errGet := s.service.Get(methodName)
 	if errGet != nil {
 		codecReq.WriteError(w, 400, errGet)

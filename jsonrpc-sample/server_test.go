@@ -31,7 +31,8 @@ func performRequest(t *testing.T, getOrPost string, path string, body string) (*
 	server, err := rpcserver.NewServer(mock)
 	require.NoError(t, err)
 	server.RegisterCodec(jsonrpc2.NewCodec(), "application/json")
-	engine := gin.Default()
+	gin.SetMode(gin.ReleaseMode)
+	engine := gin.New()
 	engine.POST("/jsonrpc/v1/:method", gin.WrapH(server))
 
 	w := httptest.NewRecorder()
@@ -57,39 +58,59 @@ func Test_01_Sanity(t *testing.T) {
 
 func Test_02_EmptyBody(t *testing.T) {
 	mock, w := performRequest(t, "POST", "/jsonrpc/v1/Action", ``)
-	require.Equal(t, 400, w.Code)
+	body := ShowResponse(t, w)
+	require.Equal(t, 200, w.Code)
+	require.True(t, len(body) > 0)
+	require.True(t, strings.Contains(body, `"error"`))
+	require.True(t, strings.Contains(body, `"code":-32700`)) // parse error
 	require.Equal(t, 0, mock.Called)
 }
 
 func Test_02_GarbageBody(t *testing.T) {
 	mock, w := performRequest(t, "POST", "/jsonrpc/v1/Action", `wtf`)
-	require.Equal(t, 400, w.Code)
+	body := ShowResponse(t, w)
+	require.Equal(t, 200, w.Code)
+	require.True(t, len(body) > 0)
+	require.True(t, strings.Contains(body, `"error"`))
+	require.True(t, strings.Contains(body, `"code":-32700`)) // parse error
 	require.Equal(t, 0, mock.Called)
 }
 
 func Test_03_InvalidJSONBody(t *testing.T) {
 	mock, w := performRequest(t, "POST", "/jsonrpc/v1/Action", `{}`) // no "jsonrpc"
-	require.Equal(t, 400, w.Code)
+	body := ShowResponse(t, w)
+	require.Equal(t, 200, w.Code)
+	require.True(t, len(body) > 0)
+	require.True(t, strings.Contains(body, `"error"`))
+	require.True(t, strings.Contains(body, `"code":-32600`)) // invalid req error
 	require.Equal(t, 0, mock.Called)
 }
 
 func Test_04_MissingMethodField(t *testing.T) {
 	mock, w := performRequest(t, "POST", "/jsonrpc/v1/Action", `{"jsonrpc": "2.0"}`)
-	require.Equal(t, 400, w.Code)
+	body := ShowResponse(t, w)
+	require.Equal(t, 200, w.Code)
+	require.True(t, len(body) > 0)
+	require.True(t, strings.Contains(body, `"error"`))
+	require.True(t, strings.Contains(body, `"code":-32601`)) // missing method error
 	require.Equal(t, 0, mock.Called)
 }
 
 func Test_05_MissingMethodHandle(t *testing.T) {
 	mock, w := performRequest(t, "POST", "/jsonrpc/v1/Wrong", `{"jsonrpc": "2.0", "method": "Action", "id":1, "params": {"A": 5, "B": 2}}`)
-
-	require.Equal(t, 404, w.Code)
+	body := ShowResponse(t, w)
+	require.Equal(t, 404, w.Code) // like response by server itself
+	require.True(t, len(body) > 0)
 	require.Equal(t, 0, mock.Called)
 }
 
 func Test_05_WrongMethodField(t *testing.T) {
 	mock, w := performRequest(t, "POST", "/jsonrpc/v1/Action", `{"jsonrpc": "2.0", "method": "Wrong", "id":1, "params": {"A": 5, "B": 2}}`)
-
-	require.Equal(t, 404, w.Code) // TODO: maybe 400 here?
+	body := ShowResponse(t, w)
+	require.Equal(t, 200, w.Code) // response by jsonrpc
+	require.True(t, len(body) > 0)
+	require.True(t, strings.Contains(body, `"error"`))
+	require.True(t, strings.Contains(body, `"code":-32601`)) // missing method error
 	require.Equal(t, 0, mock.Called)
 }
 
@@ -100,7 +121,7 @@ func Test_06_WrongMethodHandleAndField(t *testing.T) {
 	require.Equal(t, 0, mock.Called)
 }
 
-func Test_07_Error(t *testing.T) {
+func Test_07_ErrorAny(t *testing.T) {
 	mock, w := performRequest(t, "POST", "/jsonrpc/v1/Action", `{"jsonrpc": "2.0", "method": "Action", "id":1, "params": {"A": 5, "B": 5}}`) // A==B, expecting error
 
 	body := ShowResponse(t, w)
@@ -113,31 +134,31 @@ func Test_07_Error(t *testing.T) {
 	strings.Contains(body, "expected error A==B")
 }
 
-func Test_08_NotifyRequestSanity(t *testing.T) { // Notify request == without id
+func Test_08_ErrorSpecific(t *testing.T) {
+	mock, w := performRequest(t, "POST", "/jsonrpc/v1/Action", `{"jsonrpc": "2.0", "method": "Action", "id":1, "params": {"A": 10, "B": 1}}`) // A==Bx10, expecting specific error
+
+	body := ShowResponse(t, w)
+
+	require.Equal(t, 200, w.Code)
+	require.True(t, len(body) > 0)
+
+	require.Equal(t, 1, mock.Called)
+	require.Error(t, mock.Err)
+	strings.Contains(body, `{"jsonrpc":"2.0","error":{"code":500,"message":"expected error A==Bx10 - jsonrpc-aware","data":{"A":10,"B":1}},"id":1}`)
+}
+
+func Test_09_NotifyRequestHaveResponseByDefault(t *testing.T) { // Notify request == without id
 	mock, w := performRequest(t, "POST", "/jsonrpc/v1/Action", `{"jsonrpc": "2.0", "method": "Action", "params": {"A": 5, "B": 2}}`)
 
 	body := ShowResponse(t, w)
 
 	require.Equal(t, 200, w.Code)
-	require.True(t, len(body) == 0) // without response body
+	require.True(t, len(body) > 0) // without response body
 	require.Equal(t, 1, mock.Called)
 	require.Equal(t, 5, mock.A)
 	require.Equal(t, 2, mock.B)
 	require.Equal(t, 3, mock.Result)
 	require.NoError(t, mock.Err)
-}
-
-func Test_09_NotifyRequestError(t *testing.T) { // Notify request == without id
-	mock, w := performRequest(t, "POST", "/jsonrpc/v1/Action", `{"jsonrpc": "2.0", "method": "Action", "params": {"A": 5, "B": 5}}`) // A==B, expecting error
-
-	body := ShowResponse(t, w)
-
-	require.Equal(t, 200, w.Code)
-	require.True(t, len(body) == 0) // without response body
-	require.Equal(t, 1, mock.Called)
-	require.Equal(t, 5, mock.A)
-	require.Equal(t, 5, mock.B)
-	require.Error(t, mock.Err)
 }
 
 type MockArgs struct {
@@ -169,7 +190,11 @@ func (m *MockRpcObject) Action(r *http.Request, args *MockArgs, reply *MockReply
 		m.A = args.A
 		m.B = args.B
 		if args.A == args.B {
-			m.Err = errors.New("expected error A==B")
+			m.Err = errors.New("expected error A==B - simple")
+			return m.Err
+		}
+		if args.A == (args.B * 10) {
+			m.Err = jsonrpc2.NewError(500, "expected error A==Bx10 - jsonrpc-aware", args)
 			return m.Err
 		}
 		m.Result = args.A - args.B

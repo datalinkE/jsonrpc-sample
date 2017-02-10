@@ -1,5 +1,6 @@
 // Copyright 2009 The Go Authors. All rights reserved.
 // Copyright 2012 The Gorilla Authors. All rights reserved.
+// Copyright 2017 Andrey Pichugin. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -52,7 +53,7 @@ type serverResponse struct {
 	Error *Error `json:"error,omitempty"`
 
 	// This must be the same id as the request it is responding to.
-	Id *json.RawMessage `json:"id"`
+	Id *json.RawMessage `json:"id,omitempty"`
 }
 
 // ----------------------------------------------------------------------------
@@ -61,11 +62,14 @@ type serverResponse struct {
 
 // Codec creates a CodecRequest to process each request.
 type Codec struct {
+	RespectNotifyMessages bool
 }
 
 // NewCodec creates a Codec object.
 func NewCodec() *Codec {
-	return &Codec{}
+	return &Codec{
+		RespectNotifyMessages: false,
+	}
 }
 
 // ----------------------------------------------------------------------------
@@ -77,27 +81,26 @@ func (c *Codec) NewRequest(r *http.Request) rpcserver.CodecRequest {
 	req := new(serverRequest)
 	err := json.NewDecoder(r.Body).Decode(req)
 	if err != nil {
-		err = &Error{
-			Code:    E_PARSE,
-			Message: err.Error(),
-			Data:    req,
-		}
-	}
-	if req.Version != Version {
-		err = &Error{
-			Code:    E_INVALID_REQ,
-			Message: "jsonrpc must be " + Version,
-			Data:    req,
+		err = NewError(E_PARSE, err.Error(), req)
+	} else if req.Version != Version {
+		err = NewError(E_INVALID_REQ, "jsonrpc must be "+Version, req)
+	} else if req.Method == "" {
+		err = NewError(E_NO_METHOD, "method field empty or missing", req)
+	} else {
+		pathMethod := rpcserver.LastPart(r.URL.Path)
+		if pathMethod != req.Method {
+			err = NewError(E_NO_METHOD, fmt.Sprintf("rpc: URL.Path '%v' does not end with method Name '%v'", r.URL.Path, req.Method), req)
 		}
 	}
 	r.Body.Close()
-	return &CodecRequest{request: req, err: err}
+	return &CodecRequest{request: req, err: err, respectNotifyMessages: c.RespectNotifyMessages}
 }
 
 // CodecRequest decodes and encodes a single request.
 type CodecRequest struct {
-	request *serverRequest
-	err     error
+	request               *serverRequest
+	err                   error
+	respectNotifyMessages bool
 }
 
 // Error returns if request was valid or incorrect.
@@ -106,8 +109,6 @@ func (c *CodecRequest) Error() error {
 }
 
 // Method returns the RPC method for the current request.
-//
-// The method uses a dotted notation as in "Service.Method".
 func (c *CodecRequest) Method() (string, error) {
 	if c.err == nil {
 		return c.request.Method, nil
@@ -161,37 +162,33 @@ func (c *CodecRequest) WriteResponse(w http.ResponseWriter, reply interface{}) {
 }
 
 func (c *CodecRequest) WriteError(w http.ResponseWriter, status int, err error) {
-	if status == http.StatusNotFound {
-		w.WriteHeader(status)
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		fmt.Fprint(w, err.Error())
-	} else {
-		jsonErr, ok := err.(*Error)
-		if !ok {
-			jsonErr = &Error{
-				Code:    E_SERVER,
-				Message: err.Error(),
-			}
+	jsonErr, ok := err.(*Error)
+	if !ok {
+		jsonErr = &Error{
+			Code:    status,
+			Message: err.Error(),
 		}
-		res := &serverResponse{
-			Version: Version,
-			Error:   jsonErr,
-			Id:      c.request.Id,
-		}
-		c.writeServerResponse(w, res)
 	}
+	res := &serverResponse{
+		Version: Version,
+		Error:   jsonErr,
+		Id:      c.request.Id,
+	}
+	c.writeServerResponse(w, res)
 }
 
 func (c *CodecRequest) writeServerResponse(w http.ResponseWriter, res *serverResponse) {
 	// Id is null for notifications and they don't have a response.
-	if c.request.Id != nil {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		encoder := json.NewEncoder(w)
-		err := encoder.Encode(res)
+	if c.request.Id == nil && c.respectNotifyMessages {
+		return
+	}
 
-		// Not sure in which case will this happen. But seems harmless.
-		if err != nil {
-			rpcserver.WriteError(w, 400, err.Error())
-		}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	encoder := json.NewEncoder(w)
+	err := encoder.Encode(res)
+
+	// Not sure in which case will this happen. But seems harmless.
+	if err != nil {
+		rpcserver.WriteError(w, 400, err.Error())
 	}
 }
